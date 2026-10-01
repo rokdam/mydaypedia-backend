@@ -1,0 +1,71 @@
+spring:
+  application:
+    name: backend
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:mydaypedia}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: ${DB_USERNAME:mydaypedia}
+    # 비밀번호는 기본값 없이 환경변수로만 받는다 — 빠뜨리면 기동 실패(공개 저장소에 적힌 값으로 접속되지 않게).
+    # 로컬: DB_PASSWORD=mydaypedia ./gradlew bootRun (docker compose MySQL의 로컬 기본값)
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      # 마이그레이션 도구(Flyway 등) 도입 전까지는 update로 스키마를 자동 반영한다.
+      # 스키마가 안정되면 validate + Flyway/Liquibase로 전환할 것.
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        # 컬렉션 지연 로딩을 IN 쿼리로 묶어 N+1을 줄인다 (Song은 컬렉션이 여러 개라 fetch join을 전부 걸 수 없음).
+        default_batch_fetch_size: 100
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+# 모니터링 (Prometheus가 /actuator/prometheus 를 스크레이핑)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
+# 관리자 로그인 (어드민 화면 + 등록/수정/삭제 API 보호, admin 패키지)
+# 비밀번호가 비어 있으면 로그인이 불가능해 쓰기 API가 전부 막힌다(기본값 = 막힘). 로컬 docker compose에서만 값을 넣는다.
+admin:
+  password: ${ADMIN_PASSWORD:}
+  token-ttl: 12h
+  max-failures: 5
+  lock-duration: 15m
+
+# API 문서화 (Swagger UI: /swagger-ui.html, 스펙: /v3/api-docs)
+# 기본은 꺼짐(외부 공개 서버에서 API 구조가 노출되지 않게). 로컬에서만 SWAGGER_ENABLED=true로 켠다.
+# 운영 프로필에서 끄는 방식이 아니라 기본값을 끔으로 둔 이유: 호스팅에 프로필 설정을 빠뜨려도 노출되지 않게.
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+    path: /swagger-ui.html
+
+# 로그 수집: logback-spring.xml에서 logs/app.log에 JSON으로 남기고, Filebeat가 tail해서
+# Elasticsearch로 전송한다 (infra/elasticsearch/filebeat.yml). 여기서는 레벨만 관리.
+logging:
+  level:
+    root: INFO
+    com.mydaypedia.backend: DEBUG
